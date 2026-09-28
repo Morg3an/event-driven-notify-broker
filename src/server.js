@@ -1,7 +1,8 @@
 import express from 'express';
-import { config } from './config/index.js';
+import { config, features } from './config/index.js';
 import { userService } from './services/userService.js';
 import { sendWelcomeEmail } from './services/emailService.js';
+import { publishUserSignedUpEvent } from './broker/rabbitmq.js';
 
 const app = express();
 app.use(express.json());
@@ -11,7 +12,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`);
+    console.log(`📡 [HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`);
   });
   next();
 });
@@ -22,6 +23,40 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     service: config.appName,
+    features: {
+      ENABLE_ASYNC_NOTIFICATIONS: features.ENABLE_ASYNC_NOTIFICATIONS,
+    },
+  });
+});
+
+// Feature Flag Management Endpoints
+app.get('/config/flags', (req, res) => {
+  res.json({
+    flags: features,
+    description: {
+      ENABLE_ASYNC_NOTIFICATIONS:
+        'When false: synchronous SMTP email blocks HTTP response. When true: event published to RabbitMQ broker asynchronously.',
+    },
+  });
+});
+
+app.post('/config/flags', (req, res) => {
+  const { flag, enabled } = req.body;
+  if (!flag || typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'Payload must contain "flag" (string) and "enabled" (boolean)' });
+  }
+
+  if (!(flag in features)) {
+    return res.status(404).json({ error: `Flag "${flag}" not found in feature toggle registry` });
+  }
+
+  features[flag] = enabled;
+  console.log(`🔀 [FeatureFlags] Toggled flag "${flag}" -> ${enabled}`);
+
+  return res.json({
+    success: true,
+    message: `Feature flag "${flag}" updated to ${enabled}`,
+    currentFlags: features,
   });
 });
 
@@ -34,7 +69,7 @@ app.get('/users', (req, res) => {
   });
 });
 
-// POST /users - Legacy Synchronous Implementation (Baseline)
+// POST /users - Implements Feature Toggle for EDA Migration
 app.post('/users', async (req, res) => {
   const requestStartTime = Date.now();
   const { name, email } = req.body;
@@ -44,24 +79,49 @@ app.post('/users', async (req, res) => {
     const user = userService.createUser({ name, email });
     console.log(`[UserAPI] Created user record: ${user.name} (${user.email})`);
 
-    // 2. Legacy Synchronous Flow: Wait for slow SMTP email dispatch
-    console.log(`[UserAPI] Executing synchronous email dispatch (legacy blocking flow)...`);
-    const emailResult = await sendWelcomeEmail(user);
+    // 2. Branch logic based on Feature Flag
+    if (features.ENABLE_ASYNC_NOTIFICATIONS) {
+      // --- ASYNCHRONOUS EDA PATH (RabbitMQ Broker) ---
+      console.log(`[UserAPI] Flag ENABLE_ASYNC_NOTIFICATIONS is TRUE -> Publishing event to RabbitMQ`);
 
-    const totalDuration = Date.now() - requestStartTime;
+      const eventEnvelope = await publishUserSignedUpEvent(user);
+      const totalDuration = Date.now() - requestStartTime;
 
-    // 3. Return response to client after full blocking operation
-    return res.status(201).json({
-      success: true,
-      mode: 'synchronous',
-      message: 'User registered and welcome email sent synchronously (blocking).',
-      user,
-      emailResult,
-      latency: {
-        totalResponseTimeMs: totalDuration,
-        blockingTimeMs: emailResult.durationMs,
-      },
-    });
+      // Immediately respond 201 Created without blocking for email
+      return res.status(201).json({
+        success: true,
+        mode: 'asynchronous',
+        message: 'User registered successfully! Welcome email notification queued via RabbitMQ.',
+        user,
+        event: {
+          id: eventEnvelope.eventId,
+          type: eventEnvelope.eventType,
+          routingKey: eventEnvelope.metadata.routingKey,
+        },
+        latency: {
+          totalResponseTimeMs: totalDuration,
+          nonBlocking: true,
+        },
+      });
+    } else {
+      // --- SYNCHRONOUS LEGACY PATH (Blocking SMTP) ---
+      console.log(`[UserAPI] Flag ENABLE_ASYNC_NOTIFICATIONS is FALSE -> Executing legacy synchronous email`);
+
+      const emailResult = await sendWelcomeEmail(user);
+      const totalDuration = Date.now() - requestStartTime;
+
+      return res.status(201).json({
+        success: true,
+        mode: 'synchronous',
+        message: 'User registered and welcome email sent synchronously (blocking).',
+        user,
+        emailResult,
+        latency: {
+          totalResponseTimeMs: totalDuration,
+          blockingTimeMs: emailResult.durationMs,
+        },
+      });
+    }
   } catch (error) {
     console.error(`[UserAPI] Error handling registration:`, error.message);
     const status = error.statusCode || 400;
@@ -76,12 +136,13 @@ app.post('/users', async (req, res) => {
 const server = app.listen(config.port, () => {
   console.log(`
 =========================================================
-Notification Broker Service (Baseline Synchronous API)
+Notification Broker Service (API Gateway)
 Server listening on: http://localhost:${config.port}
 Environment: ${config.nodeEnv}
-Architecture Mode: SYNCHRONOUS (Blocking SMTP Email)
+Feature Flag ENABLE_ASYNC_NOTIFICATIONS: ${features.ENABLE_ASYNC_NOTIFICATIONS}
 =========================================================
   `);
 });
 
 export { app, server };
+
