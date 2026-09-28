@@ -1,0 +1,32 @@
+{
+  "name": "event-driven-notify-broker",
+  "version": "1.0.0",
+  "description": "Event-Driven Architecture migration with RabbitMQ, Feature Flags, and Git branch management",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "worker": "node src/worker.js",
+    "demo": "node scripts/demo.js",
+    "benchmark": "node scripts/benchmark.js"
+  },
+  "keywords": [
+    "rabbitmq",
+    "event-driven-architecture",
+    "eda",
+    "feature-flags",
+    "express",
+    "amqplib"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "amqplib": "^0.10.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
