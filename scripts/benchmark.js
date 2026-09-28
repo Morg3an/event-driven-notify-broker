@@ -80,8 +80,8 @@ Testing Mindset Shift: Blocking I/O vs. Asynchronous Event Decoupling
 ================================================================================
 Mode                      | HTTP Latency | User Experience
 --------------------------+--------------+--------------------------------------
-Synchronous (Legacy)      | ${String(syncResult.durationMs).padEnd(10)}ms | ⏳ User blocked waiting for SMTP email
-Event-Driven (RabbitMQ)   | ${String(asyncResult.durationMs).padEnd(10)}ms | 🚀 Immediate confirmation (<50ms)
+Synchronous (Legacy)      | ${String(syncResult.durationMs).padEnd(10)}ms | User blocked waiting for SMTP email
+Event-Driven (RabbitMQ)   | ${String(asyncResult.durationMs).padEnd(10)}ms | Immediate confirmation (<50ms)
 --------------------------+--------------+--------------------------------------
  Speedup Factor:         ${speedupFactor}x faster response
  Latency Reduction:      ${latencyReduction}% lower latency for client
