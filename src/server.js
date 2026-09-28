@@ -12,7 +12,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`📡 [HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`);
+    console.log(`[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`);
   });
   next();
 });
@@ -51,7 +51,7 @@ app.post('/config/flags', (req, res) => {
   }
 
   features[flag] = enabled;
-  console.log(`🔀 [FeatureFlags] Toggled flag "${flag}" -> ${enabled}`);
+  console.log(`[FeatureFlags] Toggled flag "${flag}" -> ${enabled}`);
 
   return res.json({
     success: true,

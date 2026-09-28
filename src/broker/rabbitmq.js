@@ -15,7 +15,7 @@ export async function getRabbitChannel() {
   }
 
   try {
-    console.log(`🔌 [Broker] Connecting to RabbitMQ at ${config.rabbitmq.url}...`);
+    console.log(`[Broker] Connecting to RabbitMQ at ${config.rabbitmq.url}...`);
     connection = await amqp.connect(config.rabbitmq.url);
 
     connection.on('error', (err) => {
